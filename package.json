@@ -1,0 +1,38 @@
+{
+  "name": "emailclient",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ParamVarunReddy/EmailClient.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ParamVarunReddy/EmailClient/issues"
+  },
+  "homepage": "https://github.com/ParamVarunReddy/EmailClient#readme",
+  "dependencies": {
+    "@azure/msal-node": "^5.3.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.5.2",
+    "express-session": "^1.19.0",
+    "googleapis": "^173.0.0",
+    "mailparser": "^3.9.12",
+    "morgan": "^1.11.0",
+    "node-imap": "^0.9.6",
+    "nodemailer": "^9.0.3",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0",
+    "uuid": "^14.0.1"
+  }
+}
