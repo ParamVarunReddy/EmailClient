@@ -32,6 +32,21 @@ const config = {
     defaultTls: process.env.IMAP_DEFAULT_TLS !== 'false',
   },
 
+  // ── Zoho Mail (OAuth 2.0) ────────────────────────────────────────────────
+  // Register your app at: https://api-console.zoho.com/
+  zoho: {
+    clientId: process.env.ZOHO_CLIENT_ID || '',
+    clientSecret: process.env.ZOHO_CLIENT_SECRET || '',
+    redirectUri: process.env.ZOHO_REDIRECT_URI || 'http://localhost:3000/receptions/auth/zoho/callback',
+    scopes: [
+      'ZohoMail.messages.READ',
+      'ZohoMail.messages.CREATE',
+      'ZohoMail.messages.UPDATE',
+      'ZohoMail.messages.DELETE',
+      'ZohoMail.folders.READ',
+    ],
+  },
+
   ai: {
     openaiApiKey: process.env.OPENAI_API_KEY || '',
     model: process.env.AI_MODEL || 'gpt-4o',

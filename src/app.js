@@ -77,7 +77,7 @@ app.get('/receptions/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    providers: ['gmail', 'outlook', 'imap'],
+    providers: ['gmail', 'outlook', 'imap', 'yahoo', 'icloud', 'zoho'],
     aiStubMode: require('./config').ai.stubMode,
   });
 });
@@ -97,6 +97,10 @@ app.get('/', (req, res) => {
         outlook: 'GET /receptions/auth/outlook',
         outlookCallback: 'GET /receptions/auth/outlook/callback',
         imap: 'POST /receptions/auth/imap',
+        yahoo: 'POST /receptions/auth/yahoo',
+        icloud: 'POST /receptions/auth/icloud',
+        zoho: 'GET /receptions/auth/zoho',
+        zohoCallback: 'GET /receptions/auth/zoho/callback',
         me: 'GET /receptions/auth/me',
         logout: 'POST /receptions/auth/logout',
       },

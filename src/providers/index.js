@@ -3,12 +3,15 @@
 const gmail = require('./gmail');
 const outlook = require('./outlook');
 const imap = require('./imap');
+const yahoo = require('./yahoo');
+const icloud = require('./icloud');
+const zoho = require('./zoho');
 
-const PROVIDERS = { gmail, outlook, imap };
+const PROVIDERS = { gmail, outlook, imap, yahoo, icloud, zoho };
 
 /**
  * Resolve the correct provider adapter from the session.
- * @param {string} providerName  One of 'gmail' | 'outlook' | 'imap'
+ * @param {string} providerName  One of 'gmail' | 'outlook' | 'imap' | 'yahoo' | 'icloud' | 'zoho'
  * @returns {object} provider adapter module
  */
 function getProvider(providerName) {

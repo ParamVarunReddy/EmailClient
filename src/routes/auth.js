@@ -3,6 +3,7 @@
 const { Router } = require('express');
 const gmailProvider = require('../providers/gmail');
 const outlookProvider = require('../providers/outlook');
+const zohoProvider = require('../providers/zoho');
 
 const router = Router();
 
@@ -106,6 +107,78 @@ router.post('/imap', (req, res) => {
   };
 
   res.json({ status: 'authenticated', provider: 'imap', user });
+});
+
+// ── Yahoo Mail ────────────────────────────────────────────────────────────────
+
+/**
+ * POST /receptions/auth/yahoo
+ * Body: { user, password }
+ * Uses Yahoo's IMAP/SMTP servers (imap.mail.yahoo.com / smtp.mail.yahoo.com).
+ * If 2-step verification is on, generate an app password at:
+ * https://myaccount.yahoo.com/security
+ */
+router.post('/yahoo', (req, res) => {
+  const { user, password } = req.body;
+  if (!user || !password) {
+    return res.status(400).json({ error: 'user and password are required for Yahoo login' });
+  }
+  req.session.provider = 'yahoo';
+  req.session.credentials = { user, password };
+  res.json({ status: 'authenticated', provider: 'yahoo', user });
+});
+
+// ── Apple iCloud ──────────────────────────────────────────────────────────────
+
+/**
+ * POST /receptions/auth/icloud
+ * Body: { user, password }
+ * Uses Apple iCloud IMAP/SMTP servers (imap.mail.me.com / smtp.mail.me.com).
+ * Requires an app-specific password from:
+ * https://appleid.apple.com → Sign-In and Security → App-Specific Passwords
+ */
+router.post('/icloud', (req, res) => {
+  const { user, password } = req.body;
+  if (!user || !password) {
+    return res.status(400).json({ error: 'user and password are required for iCloud login' });
+  }
+  req.session.provider = 'icloud';
+  req.session.credentials = { user, password };
+  res.json({ status: 'authenticated', provider: 'icloud', user });
+});
+
+// ── Zoho Mail ─────────────────────────────────────────────────────────────────
+
+/**
+ * GET /receptions/auth/zoho
+ * Redirect user to Zoho's OAuth consent screen.
+ */
+router.get('/zoho', (req, res) => {
+  const state = req.query.state || '';
+  const url = zohoProvider.getAuthUrl(state);
+  res.redirect(url);
+});
+
+/**
+ * GET /receptions/auth/zoho/callback
+ * Zoho redirects here after the user grants consent.
+ */
+router.get('/zoho/callback', async (req, res, next) => {
+  const { code, error } = req.query;
+  if (error) {
+    return res.status(400).json({ error: 'OAuth denied', details: error });
+  }
+  if (!code) {
+    return res.status(400).json({ error: 'Missing authorization code' });
+  }
+  try {
+    const credentials = await zohoProvider.exchangeCode(code);
+    req.session.provider = 'zoho';
+    req.session.credentials = credentials;
+    res.json({ status: 'authenticated', provider: 'zoho' });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // ── Session info & logout ─────────────────────────────────────────────────────
