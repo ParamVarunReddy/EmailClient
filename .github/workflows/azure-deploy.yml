@@ -29,7 +29,7 @@ on:
   workflow_dispatch:
 
 env:
-  APP_NAME: emailclient          # Must match appName in deployment/parameters.json
+  APP_NAME: emailclientai-prod-2026  # Must match appName in deployment/parameters.json
   RESOURCE_GROUP: emailclient-rg # Must match AZURE_RESOURCE_GROUP secret
   NODE_VERSION: '22.x'
 
