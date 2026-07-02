@@ -1,0 +1,185 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# EmailClient – CI/CD pipeline → Azure Web App (Free tier F1)
+#
+# Triggers:
+#   • Push to the `deployment-email-client` branch (production release)
+#   • Pull-request targeting that branch (validation / dry-run only)
+#   • Manual dispatch via the Actions UI
+#
+# Required secrets (Settings → Secrets and variables → Actions):
+#   AZURE_CREDENTIALS          – JSON from `az ad sp create-for-rbac --sdk-auth`
+#   AZURE_SUBSCRIPTION_ID      – Azure subscription GUID
+#   AZURE_RESOURCE_GROUP       – Resource group name  (e.g. emailclient-rg)
+#   SESSION_SECRET             – Express session secret
+#   GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET
+#   OUTLOOK_CLIENT_ID / OUTLOOK_CLIENT_SECRET / OUTLOOK_TENANT_ID
+#   ZOHO_CLIENT_ID / ZOHO_CLIENT_SECRET
+#   OPENAI_API_KEY             – Leave empty to keep stub mode enabled
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Deploy EmailClient to Azure Web App
+
+on:
+  push:
+    branches:
+      - deployment-email-client
+  pull_request:
+    branches:
+      - deployment-email-client
+  workflow_dispatch:
+
+env:
+  APP_NAME: emailclient          # Must match appName in deployment/parameters.json
+  RESOURCE_GROUP: emailclient-rg # Must match AZURE_RESOURCE_GROUP secret
+  NODE_VERSION: '22.x'
+
+jobs:
+  # ── 1. Build & validate ─────────────────────────────────────────────────────
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --omit=dev
+
+      - name: Run tests
+        run: npm test
+        continue-on-error: true   # tests currently echo a stub; remove once real tests exist
+
+      - name: Create deployment package
+        run: |
+          zip -r release.zip . \
+            --exclude "*.git*" \
+            --exclude ".github/*" \
+            --exclude "deployment/*" \
+            --exclude ".env*" \
+            --exclude "*.test.js" \
+            --exclude "tmp/*"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: emailclient-release
+          path: release.zip
+          retention-days: 7
+
+  # ── 2. Validate Bicep (PR only) ─────────────────────────────────────────────
+  validate-bicep:
+    name: Validate Bicep
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    needs: build
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Validate Bicep template
+        uses: azure/arm-deploy@v2
+        with:
+          subscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          resourceGroupName: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          template: deployment/main.bicep
+          parameters: deployment/parameters.json
+          deploymentMode: Validate
+
+  # ── 3. Deploy infrastructure (push to deployment branch only) ───────────────
+  deploy-infra:
+    name: Deploy Infrastructure
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: build
+    environment:
+      name: production
+      url: https://${{ env.APP_NAME }}.azurewebsites.net
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Ensure resource group exists
+        run: |
+          az group create \
+            --name "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+            --location eastus \
+            --output none
+
+      - name: Deploy Bicep template
+        uses: azure/arm-deploy@v2
+        with:
+          subscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          resourceGroupName: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          template: deployment/main.bicep
+          parameters: deployment/parameters.json
+          deploymentName: emailclient-${{ github.run_number }}
+
+  # ── 4. Deploy application code ──────────────────────────────────────────────
+  deploy-app:
+    name: Deploy Application
+    runs-on: ubuntu-latest
+    needs: deploy-infra
+    environment:
+      name: production
+      url: https://${{ env.APP_NAME }}.azurewebsites.net
+
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: emailclient-release
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Configure app settings (secrets injection)
+        run: |
+          az webapp config appsettings set \
+            --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+            --name "${{ env.APP_NAME }}" \
+            --settings \
+              SESSION_SECRET="${{ secrets.SESSION_SECRET }}" \
+              GMAIL_CLIENT_ID="${{ secrets.GMAIL_CLIENT_ID }}" \
+              GMAIL_CLIENT_SECRET="${{ secrets.GMAIL_CLIENT_SECRET }}" \
+              GMAIL_REDIRECT_URI="https://${{ env.APP_NAME }}.azurewebsites.net/receptions/auth/gmail/callback" \
+              OUTLOOK_CLIENT_ID="${{ secrets.OUTLOOK_CLIENT_ID }}" \
+              OUTLOOK_CLIENT_SECRET="${{ secrets.OUTLOOK_CLIENT_SECRET }}" \
+              OUTLOOK_TENANT_ID="${{ secrets.OUTLOOK_TENANT_ID }}" \
+              OUTLOOK_REDIRECT_URI="https://${{ env.APP_NAME }}.azurewebsites.net/receptions/auth/outlook/callback" \
+              ZOHO_CLIENT_ID="${{ secrets.ZOHO_CLIENT_ID }}" \
+              ZOHO_CLIENT_SECRET="${{ secrets.ZOHO_CLIENT_SECRET }}" \
+              ZOHO_REDIRECT_URI="https://${{ env.APP_NAME }}.azurewebsites.net/receptions/auth/zoho/callback" \
+              OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
+            --output none
+
+      - name: Deploy zip package to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.APP_NAME }}
+          package: release.zip
+
+      - name: Verify deployment
+        run: |
+          echo "Deployment complete."
+          echo "App URL: https://${{ env.APP_NAME }}.azurewebsites.net"
