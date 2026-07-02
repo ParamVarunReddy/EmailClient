@@ -38,6 +38,8 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout source
@@ -77,6 +79,8 @@ jobs:
   validate-bicep:
     name: Validate Bicep
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     if: github.event_name == 'pull_request'
     needs: build
 
@@ -102,6 +106,8 @@ jobs:
   deploy-infra:
     name: Deploy Infrastructure
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: build
     environment:
@@ -137,6 +143,7 @@ jobs:
   deploy-app:
     name: Deploy Application
     runs-on: ubuntu-latest
+    permissions: {}
     needs: deploy-infra
     environment:
       name: production
