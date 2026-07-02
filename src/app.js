@@ -4,6 +4,7 @@ const express = require('express');
 const session = require('express-session');
 const cors = require('cors');
 const morgan = require('morgan');
+const rateLimit = require('express-rate-limit');
 
 const config = require('./config');
 const { errorHandler } = require('./middleware/error');
@@ -38,6 +39,16 @@ app.use(
   })
 );
 
+// ── Rate limiting ─────────────────────────────────────────────────────────────
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests from this IP, please try again later.' },
+});
+
 // ── CSRF protection ───────────────────────────────────────────────────────────
 
 app.get('/receptions/csrf-token', csrfTokenHandler);
@@ -45,7 +56,7 @@ app.use(csrfGuard);
 
 // ── Namespace: /receptions ────────────────────────────────────────────────────
 
-app.use('/receptions/auth', authRoutes);
+app.use('/receptions/auth', authLimiter, authRoutes);
 app.use('/receptions/messages', messagesRoutes);
 app.use('/receptions/threads', threadsRoutes);
 app.use('/receptions/folders', foldersRoutes);
