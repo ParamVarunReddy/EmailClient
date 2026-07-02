@@ -5,6 +5,17 @@ const config = require('../config');
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
 
+// Resolve the fetch implementation once at module load time rather than on
+// every API call to avoid repeated dynamic-import overhead.
+let _fetchFn = typeof globalThis.fetch === 'function' ? globalThis.fetch : null;
+async function _resolveFetch() {
+  if (_fetchFn) return _fetchFn;
+  const mod = await import('node-fetch').catch(() => null);
+  _fetchFn = mod?.default ?? null;
+  if (!_fetchFn) throw new Error('No fetch implementation available');
+  return _fetchFn;
+}
+
 // ── MSAL helpers ─────────────────────────────────────────────────────────────
 
 function buildMsalApp() {
@@ -43,12 +54,7 @@ async function exchangeCode(code) {
 // ── Graph API fetch wrapper ───────────────────────────────────────────────────
 
 async function graphFetch(credentials, path, options = {}) {
-  const { default: nodeFetch } = await import('node-fetch').catch(() => {
-    // node 18+ has native fetch
-    return { default: globalThis.fetch };
-  });
-
-  const fetchFn = typeof globalThis.fetch === 'function' ? globalThis.fetch : nodeFetch;
+  const fetchFn = await _resolveFetch();
 
   const url = path.startsWith('http') ? path : `${GRAPH_BASE}${path}`;
   const res = await fetchFn(url, {
@@ -136,7 +142,8 @@ async function listFolders(credentials) {
 
 async function listFolderMessages(credentials, folderId, opts = {}) {
   const { skip = 0, top = 20 } = opts;
-  const data = await graphFetch(credentials, `/me/mailFolders/${folderId}/messages?$top=${top}&$skip=${skip}`);
+  const select = 'id,conversationId,subject,from,toRecipients,ccRecipients,bccRecipients,receivedDateTime,bodyPreview,isRead,isDraft,parentFolderId';
+  const data = await graphFetch(credentials, `/me/mailFolders/${folderId}/messages?$top=${top}&$skip=${skip}&$select=${select}`);
   return {
     messages: (data.value || []).map(normalizeMessage),
     nextLink: data['@odata.nextLink'] || null,

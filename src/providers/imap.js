@@ -133,13 +133,54 @@ async function listThreads(credentials, opts = {}) {
   return { threads: Object.values(bySubject), total: result.total };
 }
 
-/** Get a "thread" by subject key. */
+/** Get a "thread" by subject key using IMAP SEARCH to avoid fetching all messages. */
 async function getThread(credentials, id, opts = {}) {
-  const result = await listMessages(credentials, opts);
-  const messages = result.messages.filter(
-    (m) => (m.subject || '').replace(/^(re|fwd?):\s*/i, '').trim().toLowerCase() === id
-  );
-  return { id, messages, provider: 'imap' };
+  const mailbox = opts.mailbox || 'INBOX';
+  const imap = await openImap(credentials);
+  return new Promise((resolve, reject) => {
+    imap.openBox(mailbox, true, (err) => {
+      if (err) { imap.end(); return reject(err); }
+
+      // Use server-side SUBJECT search to avoid downloading the full mailbox.
+      imap.search([['SUBJECT', id]], (searchErr, uids) => {
+        if (searchErr) { imap.end(); return reject(searchErr); }
+        if (!uids || uids.length === 0) {
+          imap.end();
+          return resolve({ id, messages: [], provider: 'imap' });
+        }
+
+        const messages = [];
+        const fetch = imap.fetch(uids, {
+          bodies: ['HEADER.FIELDS (FROM TO CC BCC SUBJECT DATE MESSAGE-ID)', 'TEXT'],
+          struct: true,
+        });
+
+        fetch.on('message', (msg, seqno) => {
+          const parsed = { seqno, headers: null, text: null };
+          msg.on('body', (stream, info) => {
+            let buf = '';
+            stream.on('data', (chunk) => { buf += chunk.toString('utf8'); });
+            stream.once('end', () => {
+              if (info.which.startsWith('HEADER')) parsed.headers = Imap.parseHeader(buf);
+              else parsed.text = buf;
+            });
+          });
+          msg.once('attributes', (attrs) => { parsed.attrs = attrs; });
+          msg.once('end', () => messages.push(parsed));
+        });
+
+        fetch.once('error', (fetchErr) => { imap.end(); reject(fetchErr); });
+        fetch.once('end', () => {
+          imap.end();
+          // Filter to exact subject-key matches after fetch for precision.
+          const matched = messages
+            .map((m) => normalizeImapMessage(m, mailbox))
+            .filter((m) => (m.subject || '').replace(/^(re|fwd?):\s*/i, '').trim().toLowerCase() === id);
+          resolve({ id, messages: matched, provider: 'imap' });
+        });
+      });
+    });
+  });
 }
 
 /** Send via SMTP using the same IMAP credentials host. */

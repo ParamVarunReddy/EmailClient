@@ -43,7 +43,7 @@ async function exchangeCode(code) {
   return tokens;
 }
 
-/** List messages — returns normalized message stubs. */
+/** List messages — returns normalized message stubs (metadata only, no body). */
 async function listMessages(credentials, { pageToken, maxResults = 20, q = '' } = {}) {
   const auth = buildClient(credentials);
   const gmail = google.gmail({ version: 'v1', auth });
@@ -56,8 +56,10 @@ async function listMessages(credentials, { pageToken, maxResults = 20, q = '' } 
   });
 
   const items = listRes.data.messages || [];
+  // Use metadata format for list views: fetches headers + snippet only, no body.
+  // This avoids downloading full message content for every item in a listing.
   const messages = await Promise.all(
-    items.map((m) => getMessage(credentials, m.id))
+    items.map((m) => _getMessageMeta(gmail, m.id))
   );
 
   return {
@@ -67,7 +69,7 @@ async function listMessages(credentials, { pageToken, maxResults = 20, q = '' } 
   };
 }
 
-/** Fetch a single message by id. */
+/** Fetch a single message by id (full content including body). */
 async function getMessage(credentials, id) {
   const auth = buildClient(credentials);
   const gmail = google.gmail({ version: 'v1', auth });
@@ -76,14 +78,15 @@ async function getMessage(credentials, id) {
   return normalizeMessage(res.data);
 }
 
-/** List threads. */
+/** List threads — returns normalized thread stubs (metadata only, no body). */
 async function listThreads(credentials, { pageToken, maxResults = 20, q = '' } = {}) {
   const auth = buildClient(credentials);
   const gmail = google.gmail({ version: 'v1', auth });
 
   const res = await gmail.users.threads.list({ userId: 'me', pageToken, maxResults, q });
   const items = res.data.threads || [];
-  const threads = await Promise.all(items.map((t) => getThread(credentials, t.id)));
+  // Use metadata format for thread list views: headers + snippet only, no body.
+  const threads = await Promise.all(items.map((t) => _getThreadMeta(gmail, t.id)));
 
   return {
     threads,
@@ -91,12 +94,42 @@ async function listThreads(credentials, { pageToken, maxResults = 20, q = '' } =
   };
 }
 
-/** Fetch a single thread. */
+/** Fetch a single thread with full message bodies. */
 async function getThread(credentials, id) {
   const auth = buildClient(credentials);
   const gmail = google.gmail({ version: 'v1', auth });
 
-  const res = await gmail.users.threads.get({ userId: 'me', id });
+  const res = await gmail.users.threads.get({ userId: 'me', id, format: 'full' });
+  return {
+    id: res.data.id,
+    historyId: res.data.historyId,
+    messages: (res.data.messages || []).map(normalizeMessage),
+  };
+}
+
+// ── Private list-view helpers (reuse an already-built gmail client) ───────────
+
+/**
+ * Fetch message metadata (headers + snippet, no body) using an existing gmail
+ * client instance. Used internally by listMessages to avoid rebuilding the
+ * client for every item and to reduce API response payload.
+ */
+async function _getMessageMeta(gmail, id) {
+  const res = await gmail.users.messages.get({
+    userId: 'me',
+    id,
+    format: 'metadata',
+    metadataHeaders: ['From', 'To', 'Cc', 'Bcc', 'Subject', 'Date', 'Message-ID'],
+  });
+  return normalizeMessage(res.data);
+}
+
+/**
+ * Fetch thread metadata (headers + snippet, no body) using an existing gmail
+ * client instance. Used internally by listThreads.
+ */
+async function _getThreadMeta(gmail, id) {
+  const res = await gmail.users.threads.get({ userId: 'me', id, format: 'metadata' });
   return {
     id: res.data.id,
     historyId: res.data.historyId,
