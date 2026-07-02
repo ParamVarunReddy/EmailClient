@@ -2,7 +2,7 @@
 # EmailClient – CI/CD pipeline → Azure Web App (Free tier F1)
 #
 # Triggers:
-#   • Push to the `deployment-email-client` branch (production release)
+#   • Push to the `copilot/deployment-email-client` branch (production release)
 #   • Pull-request targeting that branch (validation / dry-run only)
 #   • Manual dispatch via the Actions UI
 #
@@ -22,10 +22,10 @@ name: Deploy EmailClient to Azure Web App
 on:
   push:
     branches:
-      - deployment-email-client
+      - copilot/deployment-email-client
   pull_request:
     branches:
-      - deployment-email-client
+      - copilot/deployment-email-client
   workflow_dispatch:
 
 env:

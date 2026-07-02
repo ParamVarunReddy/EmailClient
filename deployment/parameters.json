@@ -6,7 +6,7 @@
       "value": "emailclient"
     },
     "location": {
-      "value": "eastus"
+      "value": "westus2"
     },
     "nodeVersion": {
       "value": "NODE|22-lts"
