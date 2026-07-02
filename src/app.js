@@ -7,6 +7,7 @@ const morgan = require('morgan');
 
 const config = require('./config');
 const { errorHandler } = require('./middleware/error');
+const { csrfGuard, csrfTokenHandler } = require('./middleware/csrf');
 
 const authRoutes = require('./routes/auth');
 const messagesRoutes = require('./routes/messages');
@@ -31,10 +32,16 @@ app.use(
     cookie: {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
       maxAge: 8 * 60 * 60 * 1000, // 8 hours
     },
   })
 );
+
+// ── CSRF protection ───────────────────────────────────────────────────────────
+
+app.get('/receptions/csrf-token', csrfTokenHandler);
+app.use(csrfGuard);
 
 // ── Namespace: /receptions ────────────────────────────────────────────────────
 
